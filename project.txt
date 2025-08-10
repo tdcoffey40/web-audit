@@ -1,0 +1,254 @@
+Spec & Feature Sheet – AI Website Audit CLI Tool
+1. Overview
+A CLI-based AI-powered audit tool for comprehensive multi-domain website analysis.
+It scrapes and archives the entire site, evaluates it for accessibility, SEO, performance, UI/UX consistency, and content quality, and outputs structured data (CSV) and summarized reports (Markdown, PDF, HTML) with prioritized recommendations.
+
+2. Key Features
+A. Site Collection & Archiving
+Full-site scrape:
+
+Use headless Chromium (Puppeteer/Playwright) to:
+
+Navigate every accessible page.
+
+Capture full-page screenshots.
+
+Store HTML, CSS, JS for local analysis.
+
+Follow all internal links recursively.
+
+Optionally use site maps (sitemap.xml) for crawl guidance.
+
+Use scrape store to avoid re-fetching already-visited URLs.
+
+Output:
+
+Complete offline copy of the site.
+
+Indexed archive for later reference.
+
+B. Link Analysis
+Extract all href attributes.
+
+Check for:
+
+Broken links (404, 5xx).
+
+Redirect chains & loops.
+
+Semantic link check:
+
+Use AI to assess whether link text/ARIA label accurately matches its destination.
+
+C. Accessibility Audit
+WCAG 2.1 evaluation:
+
+Element labels (ARIA, alt text).
+
+Color contrast.
+
+Keyboard navigation & focus order.
+
+Form labels & error messaging.
+
+Automated scoring: A / AA / AAA.
+
+Catalog of issues & recommended fixes.
+
+D. SEO & Discoverability
+For each page:
+
+Meta tags (title, description).
+
+H1-H6 structure.
+
+robots.txt compliance.
+
+sitemap.xml presence & validity.
+
+Structured data (Schema.org, JSON-LD).
+
+Social meta tags (Open Graph, Twitter Cards).
+
+RSS/Atom feeds.
+
+AI recommendations for missing or weak SEO elements.
+
+E. Content Analysis
+Tone, sentiment, and audience targeting.
+
+Key topics & frequency.
+
+Identify repetitive, outdated, or irrelevant sections.
+
+Suggest:
+
+Keyword opportunities.
+
+Structural improvements.
+
+Clarity & readability enhancements.
+
+F. UI/UX Consistency Review
+Screenshot analysis:
+
+Color palette uniformity.
+
+Font consistency.
+
+Layout coherence.
+
+Detect mismatched design elements across pages.
+
+AI-generated UI improvement suggestions.
+
+G. Performance Analysis
+Automated Lighthouse audits:
+
+Performance, Accessibility, Best Practices, SEO, PWA readiness.
+
+Include raw scores + suggestions.
+
+3. Inputs
+Required:
+
+Website URL / domain.
+
+Short snippet describing the website (context for AI).
+
+Category selection (e.g., eCommerce, blog, SaaS, portfolio).
+
+Optional:
+
+Max depth or page limit.
+
+Crawl exclusions.
+
+Authentication credentials for gated areas.
+
+4. Outputs
+Data Files:
+
+audit_results.csv – All page-by-page data & AI notes.
+
+priority_triage.csv – Sorted by severity & impact.
+
+Reports:
+
+Markdown report (report.md).
+
+PDF export (report.pdf).
+
+HTML report (report.html).
+
+Assets:
+
+Screenshots folder.
+
+Archived site files.
+
+Visualizations:
+
+Graphs of Lighthouse scores over pages.
+
+SEO completeness charts.
+
+Accessibility score distribution.
+
+5. Process Flow
+Step 1 – Crawl & Capture
+Chromium loads each page fully.
+
+Capture DOM, network requests, screenshot.
+
+Extract:
+
+Text content.
+
+Metadata.
+
+All links.
+
+Step 2 – Automated Checks
+Broken link test.
+
+Lighthouse run.
+
+Accessibility scan.
+
+SEO tag validation.
+
+Step 3 – AI Analysis (per page)
+Feed collected page data into Ollama LLM (gpt-oss:20b) with targeted prompts:
+
+Accessibility review.
+
+SEO improvement list.
+
+Content tone & topic analysis.
+
+UI consistency check.
+
+Store all outputs in structured format.
+
+Step 4 – Summary & Prioritization
+AI synthesizes:
+
+High-level findings.
+
+Priority list of fixes.
+
+Category-specific recommendations.
+
+Create embeddings of all content to enable RAG for cross-page context.
+
+Step 5 – Report Generation
+Combine data & AI output into:
+
+Comprehensive CSV datasets.
+
+Human-readable PDF, MD, HTML reports.
+
+Graphs & charts for visual overview.
+
+6. Technical Considerations
+Language: Node.js + Puppeteer/Playwright for scraping + Python or Node for AI integration.
+
+Data Storage: Local JSON/CSV + folder for assets.
+
+LLM Integration:
+
+Ollama API for per-page analysis.
+
+Batched processing to manage token limits.
+
+Embeddings stored locally for RAG queries.
+
+CLI Framework: Commander.js or Python’s Click for commands/flags.
+
+PDF/HTML generation: puppeteer-pdf or wkhtmltopdf.
+
+7. Prompting Strategy
+Prompts should be modular and task-specific.
+Example for SEO module:
+
+Prompt:
+"You are an expert SEO auditor. Given the following page HTML, metadata, and extracted structured data, identify all SEO weaknesses and improvement opportunities. Output in JSON with fields: missing_tags, weak_tags, keyword_opportunities, priority_fixes."
+
+Similar prompt structures for:
+
+Accessibility (map to WCAG).
+
+UI/UX.
+
+Content quality.
+
+8. Example CLI Usage
+bash
+Copy
+Edit
+ai-audit https://example.com \
+  --context "A blog about photography tips" \
+  --category "Blog" \
+  --max-depth 5 \
+  --output ./audit_results

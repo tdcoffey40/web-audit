@@ -1,0 +1,277 @@
+C. AI Analysis Modules
+Run AI analysis per page with targeted prompts.
+
+Modules:
+
+Accessibility Review
+
+SEO Review
+
+Link Label Accuracy
+
+Content Analysis
+
+UI/UX Consistency
+
+Structured Data & Discoverability
+
+Performance Analysis
+
+Priority Fix Ranking (after all per-page results are collected)
+
+Cross-Site Summary & Trends
+
+3. Inputs
+Input	Description	Example
+url	Root domain to audit	https://example.com
+context	Short snippet about the site for AI context	"A SaaS platform for project management"
+category	Site category for tailored suggestions	"SaaS"
+max-depth	Crawl depth	5
+exclude	URL patterns to skip	/blog/archive/
+auth	Login creds for gated content	user:pass
+
+4. Outputs
+CSV datasets:
+
+full_audit.csv – All per-page results.
+
+priority_triage.csv – All issues sorted by severity/impact.
+
+Reports:
+
+Markdown (report.md)
+
+PDF (report.pdf)
+
+HTML (report.html)
+
+Assets:
+
+Screenshots in /screenshots.
+
+Offline archive in /archive.
+
+Graphs:
+
+Lighthouse scores distribution.
+
+Accessibility compliance chart.
+
+Issue counts by category.
+
+5. Workflow
+Crawl & Capture:
+
+Playwright loads each page → store HTML, screenshot, metadata.
+
+Automated Tests:
+
+Link integrity check.
+
+Lighthouse run.
+
+Accessibility scan (axe-core).
+
+AI Analysis Per Page:
+
+Send page data to Ollama gpt-oss:20b with specific prompt for each module.
+
+Aggregate & Prioritize:
+
+AI creates cross-page summaries & triage list.
+
+Generate Reports:
+
+CSVs + MD + PDF + HTML.
+
+Include visual charts.
+
+6. Prompt Set
+All prompts assume variables are injected:
+
+{site_context} – the snippet provided by user
+
+{site_category} – the category provided by user
+
+{page_url} – current page
+
+{page_html} – full HTML source
+
+{page_text} – visible text only
+
+{lighthouse_scores} – JSON from Lighthouse
+
+{accessibility_scan} – JSON from axe-core
+
+{link_list} – extracted links from page with status codes
+
+{screenshot_path} – local screenshot path
+
+Prompt 1 – Accessibility Review
+css
+Copy
+Edit
+You are a WCAG 2.1 compliance auditor. Review the following webpage HTML and accessibility scan results.
+
+Site context: {site_context}
+Site category: {site_category}
+Page URL: {page_url}
+
+Accessibility scan results: {accessibility_scan}
+HTML: {page_html}
+
+Task:
+1. Identify all accessibility violations with specific element selectors or text.
+2. For each violation, classify severity: High (blocks access), Medium (hinders access), Low (minor).
+3. Map each issue to WCAG 2.1 level A, AA, or AAA.
+4. Suggest exact code or attribute changes to fix each issue.
+5. Output in JSON array: [{selector, issue, severity, wcag_level, recommendation}].
+
+Be specific and do not give generic advice. Each recommendation must be implementable.
+Prompt 2 – SEO Review
+arduino
+Copy
+Edit
+You are an SEO specialist. Analyze the HTML of this page for on-page SEO performance.
+
+Site context: {site_context}
+Site category: {site_category}
+Page URL: {page_url}
+
+HTML: {page_html}
+
+Task:
+1. List all missing or weak SEO elements: title tag, meta description, H1, H2-H6 structure, image alt attributes, canonical tags.
+2. Suggest optimized title and meta description for this page.
+3. Identify keyword opportunities based on content.
+4. Check if the robots.txt or sitemap impacts this page's discoverability (if known).
+5. Output in JSON array: [{element, current_value, issue, optimized_value, priority}].
+Prompt 3 – Link Label Accuracy
+perl
+Copy
+Edit
+You are checking link usability. Compare each link text to its destination URL.
+
+Page URL: {page_url}
+Links: {link_list}
+
+Task:
+1. For each link, determine if link text/aria-label accurately describes its target page or file.
+2. If misleading or vague, suggest improved link text.
+3. Output in JSON array: [{link_text, href, issue, recommended_text}].
+Prompt 4 – Content Analysis
+css
+Copy
+Edit
+You are a content strategist. Review the following page content.
+
+Site context: {site_context}
+Site category: {site_category}
+Page URL: {page_url}
+Page Text: {page_text}
+
+Task:
+1. Summarize the main topics and tone of the content.
+2. Identify overused phrases or jargon that should be simplified.
+3. Suggest 3 specific improvements to increase clarity, engagement, or SEO relevance.
+4. Output as JSON: {summary, tone, overused_phrases, recommendations}.
+Prompt 5 – UI/UX Consistency
+css
+Copy
+Edit
+You are a UI/UX reviewer. Based on the HTML structure and screenshot, evaluate visual consistency.
+
+Site context: {site_context}
+Site category: {site_category}
+Page URL: {page_url}
+Screenshot path: {screenshot_path}
+
+Task:
+1. Identify inconsistent UI elements (color palette, font usage, button styles, spacing).
+2. Suggest exact visual/design changes for alignment with the rest of the site.
+3. Highlight any readability issues.
+4. Output in JSON: {inconsistencies:[], recommendations:[]}.
+Prompt 6 – Structured Data & Discoverability
+css
+Copy
+Edit
+You are a discoverability expert. Review this page for structured data and social metadata.
+
+Page URL: {page_url}
+HTML: {page_html}
+
+Task:
+1. Check for Schema.org or JSON-LD structured data and validate its type.
+2. Check for Open Graph and Twitter Card tags.
+3. Check for RSS/Atom feed links.
+4. Suggest additional structured data types relevant for {site_category}.
+5. Output in JSON: {structured_data:[], social_tags:[], feeds:[], recommendations:[]}.
+Prompt 7 – Performance Analysis
+arduino
+Copy
+Edit
+You are a web performance engineer. Review the Lighthouse results for this page.
+
+Page URL: {page_url}
+Lighthouse scores: {lighthouse_scores}
+
+Task:
+1. List top 5 performance bottlenecks (e.g., render-blocking scripts, large images).
+2. Suggest exact code or config changes to fix each.
+3. Output in JSON: {bottlenecks:[], recommendations:[]}.
+Prompt 8 – Priority Fix Ranking
+css
+Copy
+Edit
+You are a triage expert. Given the collected accessibility, SEO, content, UI/UX, and performance issues for all pages, create a ranked fix list.
+
+Site context: {site_context}
+Site category: {site_category}
+
+Issues dataset: {all_page_issues}
+
+Task:
+1. Rank all issues by combined impact on user experience, SEO, and business goals.
+2. Categorize: High, Medium, Low.
+3. Suggest estimated effort to fix (Low, Medium, High).
+4. Output in JSON array: [{priority_rank, severity, issue_summary, affected_pages, estimated_effort}].
+Prompt 9 – Cross-Site Summary & Trends
+css
+Copy
+Edit
+You are a senior digital strategist. Summarize the findings across all pages.
+
+Site context: {site_context}
+Site category: {site_category}
+
+Aggregate data: {all_results}
+
+Task:
+1. Summarize recurring issues and patterns.
+2. Highlight site strengths.
+3. Identify top 5 opportunities for improvement.
+4. Provide a one-page executive summary in Markdown format.
+
+Prompt 10 – Information Architecture Review
+css
+Copy
+Edit
+You are an information architecture specialist. Review the website's navigation structure and content organization.
+
+Site context: {site_context}
+Site category: {site_category}
+
+Navigation Data: {navigation_data}
+Content Structure: {content_structure}
+Alignment Analysis: {alignment_analysis}
+Information Hierarchy: {information_hierarchy}
+
+Task:
+1. Evaluate the alignment between navigation elements and actual content.
+2. Assess the logical organization and hierarchy of information.
+3. Identify navigation inconsistencies and gaps.
+4. Suggest specific improvements to information architecture.
+5. Recommend navigation enhancements for better user experience.
+6. Output in JSON: {"navigation_assessment": "", "content_organization": "", "hierarchy_issues": [], "alignment_score": 0, "recommendations": []}.
+
+Focus on actionable recommendations that will improve findability and user navigation.
