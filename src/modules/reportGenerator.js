@@ -81,7 +81,7 @@ class ReportGenerator {
         hasViewport: analysis.seo?.technical?.hasViewport || false,
         hasLang: analysis.seo?.technical?.hasLang || false,
         
-        // AI Analysis Summary (Enhanced)
+        // Advanced Analysis Summary (Enhanced)
         aiAccessibilityIssues: this.countAIIssues(analysis.ai?.accessibility),
         aiSeoIssues: this.countAIIssues(analysis.ai?.seo),
         aiContentIssues: this.countAIIssues(analysis.ai?.content),
@@ -150,6 +150,7 @@ class ReportGenerator {
       severity: issue.severity || 'medium',
       category: issue.type || 'general',
       issue_summary: issue.issue_summary || issue.issue || 'Unknown issue',
+      reason_flagged: issue.description || issue.reason || issue.details || issue.issue_summary || issue.issue || 'No specific reason provided',
       affected_pages_count: Array.isArray(issue.affected_pages) ? issue.affected_pages.length : 1,
       affected_pages: Array.isArray(issue.affected_pages) ? issue.affected_pages.join('; ') : (issue.page || ''),
       estimated_effort: issue.estimated_effort || 'medium',
@@ -165,6 +166,7 @@ class ReportGenerator {
         { id: 'severity', title: 'Severity' },
         { id: 'category', title: 'Category' },
         { id: 'issue_summary', title: 'Issue Summary' },
+        { id: 'reason_flagged', title: 'Reason Flagged' },
         { id: 'affected_pages_count', title: 'Affected Pages Count' },
         { id: 'affected_pages', title: 'Affected Pages' },
         { id: 'estimated_effort', title: 'Estimated Effort' },
@@ -252,21 +254,31 @@ class ReportGenerator {
     
     let markdown = `# Comprehensive Website Audit Report
 
-**Site:** ${this.options.url}
-**Context:** ${this.options.context}
-**Category:** ${this.options.category}
-**Date:** ${new Date().toLocaleDateString()}
+**Site:** ${this.options.url}  
+**Context:** ${this.options.context}  
+**Category:** ${this.options.category}  
+**Date:** ${new Date().toLocaleDateString()}  
 **Pages Analyzed:** ${pages.length}
 
 ---
 
+## Executive Summary
+
 `;
 
-    // Add enhanced summary content (remove duplicate header)
+    // Add enhanced summary content
     if (summary?.executiveSummary) {
-      markdown += summary.executiveSummary;
+      // Clean up common formatting issues in AI-generated content
+      let cleanedSummary = summary.executiveSummary;
+      
+      // Fix malformed bullet points (remove leading dots and fix formatting)
+      cleanedSummary = cleanedSummary.replace(/(\d+\.\s*)\*\*(\.\s*)/g, '$1**');
+      cleanedSummary = cleanedSummary.replace(/\*\*-\s*/g, '   - ');
+      cleanedSummary = cleanedSummary.replace(/(\d+\.\s*\*\*[^*]+\*\*)\s*\n\s*-/g, '$1\n   -');
+      
+      markdown += cleanedSummary;
     } else if (summary?.message) {
-      markdown += `## Executive Summary\n\n${summary.message}`;
+      markdown += summary.message;
     } else {
       markdown += this.generateEnhancedSummary(pages, summary);
     }
@@ -275,11 +287,17 @@ class ReportGenerator {
 
 ---
 
+## Action Items by Department
+
+${this.generateTaskList(pages, issues, recommendations)}
+
+---
+
 ## Overall Health Assessment
 
 `;
 
-    // Enhanced health metrics
+    // Enhanced health metrics with advanced assessment
     const overallHealth = summary?.overallHealth || this.calculateOverallHealth(pages);
     
     markdown += `
@@ -288,10 +306,16 @@ class ReportGenerator {
 ### Category Breakdown
 | Category | Score | Grade | Key Insights |
 |----------|-------|-------|--------------|
-| Accessibility | ${overallHealth.breakdown?.accessibility || 0}% | ${this.getGrade(overallHealth.breakdown?.accessibility || 0)} | ${this.getAccessibilityInsight(pages)} |
-| SEO | ${overallHealth.breakdown?.seo || 0}% | ${this.getGrade(overallHealth.breakdown?.seo || 0)} | ${this.getSEOInsight(pages)} |
-| Performance | ${overallHealth.breakdown?.performance || 0}% | ${this.getGrade(overallHealth.breakdown?.performance || 0)} | ${this.getPerformanceInsight(pages)} |
-| Content Quality | ${overallHealth.breakdown?.content || 0}% | ${this.getGrade(overallHealth.breakdown?.content || 0)} | ${this.getContentInsight(pages)} |
+| Accessibility | ${(overallHealth.breakdown?.accessibility || 0).toFixed(1)}% | ${this.getGrade(overallHealth.breakdown?.accessibility || 0)} | ${this.getAccessibilityInsight(pages)} |
+| SEO | ${(overallHealth.breakdown?.seo || 0).toFixed(1)}% | ${this.getGrade(overallHealth.breakdown?.seo || 0)} | ${this.getSEOInsight(pages)} |
+| Performance | ${(overallHealth.breakdown?.performance || 0).toFixed(1)}% | ${this.getGrade(overallHealth.breakdown?.performance || 0)} | ${this.getPerformanceInsight(pages)} |
+| Content Quality | ${(overallHealth.breakdown?.content || 0).toFixed(1)}% | ${this.getGrade(overallHealth.breakdown?.content || 0)} | ${this.getContentInsight(pages)} |
+
+---
+
+## Strategic Recommendations
+
+${this.generateStrategicRecommendationsSection(summary)}
 
 ---
 
@@ -299,19 +323,10 @@ class ReportGenerator {
 
 `;
 
-    // Enhanced content analysis with actual AI data
-    const contentInsights = this.extractContentInsights(pages);
+    // Use enhanced content analysis
+    markdown += this.generateEnhancedContentAnalysis(pages, summary);
     
     markdown += `
-### Content Overview
-- **Total Topics Identified:** ${contentInsights.totalTopics || 0}
-- **Common Content Tones:** ${contentInsights.commonTones?.join(', ') || 'Mixed/Variable'}
-- **Average Content Quality:** ${contentInsights.averageQuality || 0}/10
-- **Target Audience Consistency:** ${this.analyzeAudienceConsistency(pages)}
-
-### Content Topics & Themes
-${this.generateContentTopicsSection(pages)}
-
 ### Content Recommendations
 ${this.generateContentRecommendations(pages)}
 
@@ -388,9 +403,15 @@ ${this.generateIARecommendations(ia)}
 `;
 
     // Enhanced recommendations
-    if (recommendations && recommendations.length > 0) {
-      const quickWins = recommendations.filter(r => r.category === 'Quick Win');
-      const strategic = recommendations.filter(r => r.category === 'Strategic');
+    if (recommendations && Array.isArray(recommendations) && recommendations.length > 0) {
+      const quickWins = recommendations.filter(r => {
+        if (typeof r === 'string') return false; // Skip if it's just a string
+        return r && typeof r === 'object' && r.category === 'Quick Win';
+      });
+      const strategic = recommendations.filter(r => {
+        if (typeof r === 'string') return false; // Skip if it's just a string
+        return r && typeof r === 'object' && r.category === 'Strategic';
+      });
       
       if (quickWins.length > 0) {
         markdown += `
@@ -398,11 +419,15 @@ ${this.generateIARecommendations(ia)}
 
 `;
         quickWins.forEach((rec, index) => {
+          // Ensure rec is an object and has required properties
+          const recommendation = typeof rec === 'string' ? rec : (rec?.recommendation || rec?.title || 'Recommendation not specified');
+          const description = typeof rec === 'object' ? (rec?.description || rec?.details || 'Quick implementation recommended') : '';
+          const priority = typeof rec === 'object' ? (rec?.priority || 'High') : 'High';
+          
           markdown += `
-${index + 1}. **${rec.recommendation}**
-   - Priority: ${rec.priority}
-   - Expected Impact: High
-   - Effort Required: Low
+${index + 1}. **${recommendation}**
+   - ${description}
+   - Priority: ${priority} | Expected Impact: High | Effort Required: Low
 
 `;
         });
@@ -414,11 +439,17 @@ ${index + 1}. **${rec.recommendation}**
 
 `;
         strategic.forEach((rec, index) => {
+          // Ensure rec is an object and has required properties
+          const recommendation = typeof rec === 'string' ? rec : (rec?.recommendation || rec?.title || 'Recommendation not specified');
+          const description = typeof rec === 'object' ? (rec?.description || rec?.details || 'Implementation details to be defined') : '';
+          const priority = typeof rec === 'object' ? (rec?.priority || 'High') : 'High';
+          const impact = typeof rec === 'object' ? (rec?.impact || 'High') : 'High';
+          const effort = typeof rec === 'object' ? (rec?.effort || 'Medium-High') : 'Medium-High';
+          
           markdown += `
-${index + 1}. **${rec.recommendation}**
-   - Priority: ${rec.priority}
-   - Expected Impact: High
-   - Effort Required: Medium-High
+${index + 1}. **${recommendation}**
+   - ${description}
+   - Priority: ${priority} | Expected Impact: ${impact} | Effort Required: ${effort}
 
 `;
         });
@@ -441,7 +472,7 @@ Click to expand individual page insights:
 <details>
 <summary><strong>Page ${index + 1}: ${page.title || 'Untitled'}</strong> (${page.url})</summary>
 
-### AI Analysis Summary
+### Advanced Analysis Summary
 ${this.generatePageAIAnalysis(page)}
 
 ### Technical Metrics
@@ -458,6 +489,39 @@ ${this.generatePageAIAnalysis(page)}
 
 ---
 
+## Using the Data Files
+
+This audit generates several CSV files that provide detailed, actionable data for technical teams and stakeholders:
+
+### Available Downloads
+
+**[full_audit.csv](./full_audit.csv)**
+- Complete technical analysis for every page
+- Includes performance metrics, accessibility scores, SEO data, and content analysis
+- Use for: Comprehensive review, trend analysis, and technical planning
+- Format: One row per page with all metrics
+
+**[priority_triage.csv](./priority_triage.csv)**  
+- Critical issues requiring immediate attention
+- Organized by severity and impact level
+- Use for: Sprint planning, quick wins identification, and resource allocation
+- Format: One row per issue with priority, page, and recommended action
+
+**[links_status.csv](./links_status.csv)**
+- Status of all internal and external links
+- Identifies broken links, redirects, and accessibility issues
+- Use for: Site maintenance, SEO optimization, and user experience improvements
+- Format: One row per link with status codes and recommendations
+
+### Working with the Data
+
+- **Import into Excel/Google Sheets** for sorting, filtering, and pivot analysis
+- **Use priority_triage.csv** for immediate action items and team assignments
+- **Reference full_audit.csv** for detailed technical metrics and historical tracking
+- **Monitor links_status.csv** regularly to maintain site health and user experience
+
+---
+
 ## Conclusion
 
 This comprehensive audit provides actionable insights across content strategy, user experience, technical performance, and information architecture. Priority should be given to the Quick Wins for immediate impact, followed by strategic improvements for long-term success.
@@ -466,7 +530,7 @@ For questions about this audit or implementation support, please refer to the de
 
 ---
 
-*Report generated on ${new Date().toISOString()} by AI Website Audit Tool*
+*Report generated on ${new Date().toISOString()} by Website Audit Tool*
 `;
 
     await fs.writeFile(path.join(this.outputDir, 'report.md'), markdown);
@@ -483,6 +547,124 @@ For questions about this audit or implementation support, please refer to the de
 - ${this.countHighPriorityIssues(pages)} high-priority issues requiring immediate attention
 
 The analysis reveals both opportunities for quick wins and strategic improvements that will enhance user experience, search visibility, and content effectiveness.`;
+  }
+
+  generateTaskList(pages, issues, recommendations) {
+    const tasks = {
+      seo: [],
+      accessibility: [],
+      development: [],
+      content: [],
+      design: []
+    };
+
+    // Process issues from CSV/analysis and categorize them
+    if (Array.isArray(issues)) {
+      issues.forEach(issue => {
+        const taskItem = {
+          task: typeof issue === 'string' ? issue : (issue.issue_summary || issue.issue || 'Unknown issue'),
+          priority: typeof issue === 'object' ? (issue.severity || 'Medium') : 'Medium',
+          effort: typeof issue === 'object' ? (issue.estimated_effort || 'Medium') : 'Medium'
+        };
+
+        // Categorize by type
+        if (issue.category === 'accessibility' || (typeof issue === 'string' && issue.toLowerCase().includes('accessibility'))) {
+          tasks.accessibility.push(taskItem);
+        } else if (issue.category === 'seo' || (typeof issue === 'string' && issue.toLowerCase().includes('seo'))) {
+          tasks.seo.push(taskItem);
+        } else if (issue.category === 'performance' || (typeof issue === 'string' && issue.toLowerCase().includes('performance'))) {
+          tasks.development.push(taskItem);
+        } else if (issue.category === 'content' || (typeof issue === 'string' && issue.toLowerCase().includes('content'))) {
+          tasks.content.push(taskItem);
+        } else if (issue.category === 'ux' || issue.category === 'uiux' || (typeof issue === 'string' && issue.toLowerCase().includes('design'))) {
+          tasks.design.push(taskItem);
+        } else {
+          // Default categorization based on common keywords
+          const taskText = taskItem.task.toLowerCase();
+          if (taskText.includes('link') || taskText.includes('screen reader') || taskText.includes('aria')) {
+            tasks.accessibility.push(taskItem);
+          } else if (taskText.includes('meta') || taskText.includes('title') || taskText.includes('heading')) {
+            tasks.seo.push(taskItem);
+          } else if (taskText.includes('button') || taskText.includes('navigation') || taskText.includes('font')) {
+            tasks.design.push(taskItem);
+          } else {
+            tasks.development.push(taskItem);
+          }
+        }
+      });
+    }
+
+    // If no issues from AI analysis, derive from technical analysis
+    if (Object.values(tasks).every(arr => arr.length === 0)) {
+      pages.forEach(page => {
+        // SEO issues
+        if (page.analysis?.seo?.issues) {
+          page.analysis.seo.issues.forEach(issue => {
+            tasks.seo.push({
+              task: issue,
+              priority: 'Medium',
+              effort: 'Low'
+            });
+          });
+        }
+
+        // Accessibility issues
+        if (page.analysis?.accessibility?.violations) {
+          page.analysis.accessibility.violations.forEach(violation => {
+            tasks.accessibility.push({
+              task: violation.description || violation.help || 'Accessibility violation',
+              priority: violation.impact === 'critical' ? 'High' : 'Medium',
+              effort: 'Medium'
+            });
+          });
+        }
+
+        // Performance issues  
+        if (page.analysis?.performance) {
+          const perf = page.analysis.performance;
+          if (perf.metrics?.LCP > 2500) {
+            tasks.development.push({
+              task: 'Improve Largest Contentful Paint (LCP) performance',
+              priority: 'High',
+              effort: 'High'
+            });
+          }
+          if (perf.metrics?.CLS > 0.1) {
+            tasks.development.push({
+              task: 'Fix Cumulative Layout Shift (CLS) issues',
+              priority: 'Medium',
+              effort: 'Medium'
+            });
+          }
+        }
+      });
+    }
+
+    // Generate markdown for each category
+    let taskListMarkdown = '';
+    
+    const categories = [
+      { key: 'accessibility', title: '### 🔧 Accessibility Team', icon: '♿' },
+      { key: 'seo', title: '### 📈 SEO/Marketing Team', icon: '🔍' },
+      { key: 'development', title: '### 💻 Development Team', icon: '⚙️' },
+      { key: 'content', title: '### ✍️ Content Management Team', icon: '📝' },
+      { key: 'design', title: '### 🎨 Design Team', icon: '🎯' }
+    ];
+
+    categories.forEach(category => {
+      const categoryTasks = tasks[category.key];
+      if (categoryTasks.length > 0) {
+        taskListMarkdown += `\n${category.title}\n\n`;
+        categoryTasks.slice(0, 10).forEach((task, index) => { // Limit to top 10 per category
+          taskListMarkdown += `${index + 1}. **${task.task}**\n   - Priority: ${task.priority} | Effort: ${task.effort}\n\n`;
+        });
+        if (categoryTasks.length > 10) {
+          taskListMarkdown += `   *...and ${categoryTasks.length - 10} more items in detailed CSV files*\n\n`;
+        }
+      }
+    });
+
+    return taskListMarkdown || 'No specific action items identified. Review detailed analysis sections below.';
   }
 
   calculateOverallHealth(pages) {
@@ -503,10 +685,47 @@ The analysis reveals both opportunities for quick wins and strategic improvement
   }
 
   calculateAverageContentScore(pages) {
-    const scores = pages
+    // First try AI content scores
+    const aiScores = pages
       .map(p => p.analysis?.ai?.content?.qualityScore || 0)
       .filter(s => s > 0);
-    return scores.length ? Math.round(scores.reduce((a, b) => a + b, 0) / scores.length * 10) : 0;
+    
+    if (aiScores.length > 0) {
+      // Quality scores are typically 1-10, convert to percentage
+      const avgScore = aiScores.reduce((a, b) => a + b, 0) / aiScores.length;
+      return Math.round(avgScore * 10); // Convert 1-10 scale to 0-100 percentage
+    }
+    
+    // Fallback: derive content score from technical metrics
+    const technicalScores = [];
+    
+    pages.forEach(page => {
+      let score = 50; // Start with neutral score
+      
+      // SEO content factors
+      if (page.analysis?.seo) {
+        const seo = page.analysis.seo;
+        if (seo.meta?.title) score += 10;
+        if (seo.meta?.description) score += 10;
+        if (seo.headings?.h1?.length === 1) score += 10;
+        if (seo.images?.withAlt > 0) score += 5;
+        if (seo.wordCount > 300) score += 10;
+        if (seo.structured?.hasStructuredData) score += 5;
+      }
+      
+      // Accessibility content factors
+      if (page.analysis?.accessibility) {
+        const violations = page.analysis.accessibility.totalViolations || 0;
+        if (violations < 3) score += 10;
+        else if (violations < 10) score += 5;
+      }
+      
+      technicalScores.push(Math.min(score, 100)); // Cap at 100
+    });
+    
+    return technicalScores.length > 0 
+      ? Math.round(technicalScores.reduce((a, b) => a + b, 0) / technicalScores.length)
+      : 50; // Default neutral score
   }
 
   getAccessibilityInsight(pages) {
@@ -526,7 +745,13 @@ The analysis reveals both opportunities for quick wins and strategic improvement
 
   getContentInsight(pages) {
     const contentPages = pages.filter(p => p.analysis?.ai?.content?.qualityScore);
-    return contentPages.length ? `${contentPages.length} pages analyzed` : 'Limited content analysis';
+    const avgScore = this.calculateAverageContentScore(pages);
+    
+    if (contentPages.length === 0) {
+      return pages.length > 0 ? 'Content analysis in progress' : 'No content analyzed';
+    }
+    
+    return avgScore >= 70 ? 'High quality content' : avgScore >= 50 ? 'Moderate quality content' : 'Content needs improvement';
   }
 
   extractContentInsights(pages) {
@@ -601,7 +826,7 @@ The analysis reveals both opportunities for quick wins and strategic improvement
     const uniqueRecs = [...new Set(recommendations)].filter(rec => rec && !rec.includes('failed')).slice(0, 5);
     
     if (uniqueRecs.length === 0) {
-      return 'AI-powered content analysis will provide recommendations when available.';
+      return 'Advanced content analysis will provide recommendations when available.';
     }
     
     return uniqueRecs.map((rec, i) => `${i + 1}. ${rec}`).join('\n');
@@ -866,6 +1091,109 @@ The analysis identified multiple opportunities for improvement across all catego
     }
 
     return findings;
+  }
+
+  generateStrategicRecommendationsSection(summary) {
+    if (!summary?.recommendations || summary.recommendations.length === 0) {
+      return `### Strategic Priorities
+
+Based on the analysis, the following strategic priorities have been identified:
+
+1. **Improve Technical Foundation** - Address performance and accessibility issues
+2. **Enhance Content Strategy** - Focus on content quality and user engagement  
+3. **Optimize for Search** - Improve SEO fundamentals and discoverability
+4. **Strengthen User Experience** - Ensure consistent design and navigation
+
+*Detailed recommendations are provided in the individual section analyses below.*`;
+    }
+
+    let recommendationsText = `### Strategic Priorities\n\n`;
+    
+    summary.recommendations.forEach((rec, index) => {
+      recommendationsText += `${index + 1}. **${rec.recommendation}**\n`;
+      if (rec.impact) {
+        recommendationsText += `   - *Impact:* ${rec.impact}\n`;
+      }
+      if (rec.category) {
+        recommendationsText += `   - *Category:* ${rec.category}\n`;
+      }
+      recommendationsText += `\n`;
+    });
+
+    return recommendationsText;
+  }
+
+  generateEnhancedContentAnalysis(pages, summary) {
+    const contentInsights = summary?.contentInsights || this.extractContentInsights(pages);
+    
+    let contentSection = `### Content Analysis\n\n`;
+    
+    // Target audience analysis
+    if (summary?.targetAudiences && summary.targetAudiences.length > 0) {
+      contentSection += `**Target Audiences Identified:**\n`;
+      summary.targetAudiences.forEach(audience => {
+        contentSection += `- ${audience}\n`;
+      });
+      contentSection += `\n`;
+    }
+    
+    // Content topics with analysis
+    if (contentInsights.totalTopics > 0) {
+      contentSection += `**Content Topics Covered:** ${contentInsights.totalTopics} unique topics identified\n\n`;
+      
+      // Get topics from individual pages
+      const allTopics = [];
+      pages.forEach(page => {
+        if (page.analysis?.ai?.content?.topics) {
+          allTopics.push(...page.analysis.ai.content.topics);
+        }
+      });
+      
+      const uniqueTopics = [...new Set(allTopics)];
+      if (uniqueTopics.length > 0) {
+        contentSection += `**Key Topics:** ${uniqueTopics.slice(0, 10).join(', ')}\n\n`;
+      }
+    }
+    
+    // Content quality overview
+    contentSection += `**Average Content Quality:** ${contentInsights.averageQuality}/10\n\n`;
+    
+    // Common tones
+    if (contentInsights.commonTones && contentInsights.commonTones.length > 0) {
+      contentSection += `**Content Tones:** ${contentInsights.commonTones.join(', ')}\n\n`;
+    }
+    
+    return contentSection;
+  }
+
+  // Improve page dropdown formatting
+  generatePageDropdowns(pages) {
+    let dropdownHtml = '';
+    
+    pages.forEach((page, index) => {
+      const pageNumber = index + 1;
+      const url = page.url;
+      const title = page.title || 'Untitled Page';
+      const summary = page.analysis?.ai?.content?.summary || 'No AI analysis available';
+      
+      dropdownHtml += `
+<details>
+<summary><strong>Page ${pageNumber}:</strong> ${title}</summary>
+
+**URL:** ${url}
+
+**Content Summary:** ${summary}
+
+**Performance Score:** ${page.analysis?.performance?.score || 'N/A'}  
+**Accessibility Score:** ${page.analysis?.accessibility?.score || 'N/A'}  
+**SEO Score:** ${page.analysis?.seo?.score || 'N/A'}
+
+</details>
+
+`;
+    });
+    
+    return dropdownHtml;
   }
 }
 

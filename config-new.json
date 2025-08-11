@@ -11,8 +11,7 @@
       "model": "gpt-5",
       "baseURL": "https://api.openai.com/v1",
       "maxCompletionTokens": 4000,
-      "temperature": 0.1,
-      "timeout": 180000
+      "temperature": 0.1
     }
   },
   "crawling": {

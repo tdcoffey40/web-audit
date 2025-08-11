@@ -23,9 +23,13 @@ class AccessibilityScanner {
     try {
       const page = await browser.newPage();
       
+      // Set page timeouts
+      page.setDefaultTimeout(60000); // 1 minute for page operations
+      page.setDefaultNavigationTimeout(60000); // 1 minute for navigation
+      
       try {
         // Load the page content
-        await page.setContent(pageData.html, { waitUntil: 'domcontentloaded', timeout: 30000 });
+        await page.setContent(pageData.html, { waitUntil: 'domcontentloaded', timeout: 60000 });
         
         // Inject axe-core
         await page.addScriptTag({ content: this.axeScript });

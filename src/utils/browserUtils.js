@@ -69,7 +69,9 @@ function getBrowserLaunchOptions(customOptions = {}) {
     defaultViewport: { width: 1920, height: 1080 },
     handleSIGINT: false,
     handleSIGTERM: false,
-    handleSIGHUP: false
+    handleSIGHUP: false,
+    protocolTimeout: 120000, // 2 minutes for protocol operations
+    timeout: 60000 // 1 minute for browser operations
   };
 
   if (executablePath) {

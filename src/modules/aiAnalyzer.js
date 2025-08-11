@@ -418,47 +418,49 @@ Output as JSON: {
 
   async generateSummaryAndPrioritization(pages, iaResults) {
     try {
-      const comprehensiveAnalysis = this.generateComprehensiveAnalysis(pages);
-      const crossSiteInsights = this.generateCrossSiteInsights(pages);
+      // Extract actual data for more specific AI analysis
+      const overallHealth = this.calculateOverallHealth(pages);
+      const contentInsights = this.extractContentInsights(pages);
+      const technicalInsights = this.extractTechnicalInsights(pages);
+      const uxInsights = this.extractUXInsights(pages);
+      const criticalIssues = this.extractCriticalIssues(pages);
       
-      const prompt = `You are a senior digital strategist providing executive-level insights on this website audit.
+      // Get target audiences from all pages
+      const allAudiences = this.extractTargetAudiences(pages);
+      
+      // Extract specific findings for AI analysis
+      const keyFindings = this.extractKeyFindings(pages);
+      
+      const prompt = `You are a senior digital strategist providing an executive website audit summary.
 
-COMPREHENSIVE SITE ANALYSIS:
-${comprehensiveAnalysis}
+WEBSITE AUDIT DATA:
+- Site: ${this.options.context || 'Website'}
+- Category: ${this.options.category || 'General'}
+- Pages Analyzed: ${pages.length}
+- Overall Health: ${overallHealth.score}/100 (${overallHealth.grade})
+- Performance: ${overallHealth.breakdown.performance.toFixed(1)}%
+- Accessibility: ${overallHealth.breakdown.accessibility.toFixed(1)}%
+- SEO: ${overallHealth.breakdown.seo.toFixed(1)}%
+- Content Quality: ${contentInsights.averageQuality}/10
 
-CROSS-SITE INSIGHTS:
-${crossSiteInsights}
+KEY FINDINGS:
+${keyFindings}
 
-INFORMATION ARCHITECTURE:
-${iaResults ? JSON.stringify(iaResults, null, 2) : 'No IA analysis available'}
+TARGET AUDIENCES FOUND:
+${allAudiences.join(', ')}
 
-Provide an executive summary covering:
+CRITICAL ISSUES:
+${criticalIssues}
 
-1. OVERALL WEBSITE HEALTH ASSESSMENT
-   - Current state evaluation
-   - Strengths and competitive advantages
-   - Critical weaknesses and risks
+PROVIDE:
 
-2. CONTENT & UX STRATEGY INSIGHTS
-   - Content quality and consistency analysis
-   - User experience and design patterns
-   - Brand presentation and messaging
+1. **OVERALL HEALTH ASSESSMENT** (3-4 sentences with specific findings and scores)
+2. **KEY STRENGTHS** (3 specific bullet points based on actual data)
+3. **CRITICAL ISSUES** (3 specific bullet points with page examples)  
+4. **TARGET AUDIENCE ANALYSIS** (group similar audiences, identify primary vs secondary)
+5. **TOP 5 STRATEGIC RECOMMENDATIONS** (specific, actionable, with business impact)
 
-3. TECHNICAL PERFORMANCE OVERVIEW
-   - SEO and discoverability status
-   - Performance and accessibility compliance
-   - Technical debt and infrastructure issues
-
-4. STRATEGIC RECOMMENDATIONS (Top 5)
-   - High-impact improvements with business rationale
-   - Resource allocation priorities
-   - Timeline and effort estimates
-
-5. INFORMATION ARCHITECTURE ASSESSMENT
-   - Navigation and content organization
-   - User journey optimization opportunities
-
-Keep response comprehensive but executive-friendly (under 1000 words).`;
+Be specific and reference actual findings, not generic advice. Keep under 600 words total.`;
 
       const response = await this.queryAI(prompt);
       
@@ -466,13 +468,15 @@ Keep response comprehensive but executive-friendly (under 1000 words).`;
         summary: {
           totalPages: pages.length,
           executiveSummary: response,
-          overallHealth: this.calculateOverallHealth(pages),
-          contentInsights: this.extractContentInsights(pages),
-          technicalInsights: this.extractTechnicalInsights(pages),
-          uxInsights: this.extractUXInsights(pages)
+          overallHealth: overallHealth,
+          contentInsights: contentInsights,
+          technicalInsights: technicalInsights,
+          uxInsights: uxInsights,
+          targetAudiences: this.groupTargetAudiences(allAudiences),
+          keyFindings: keyFindings
         },
         issues: this.aggregateAllIssues(pages),
-        recommendations: this.generateStrategicRecommendations(pages, response),
+        recommendations: this.extractStrategicRecommendations(response, pages),
         informationArchitecture: iaResults
       };
     } catch (error) {
@@ -561,16 +565,20 @@ Keep response comprehensive but executive-friendly (under 1000 words).`;
             content: prompt
           }
         ],
-        max_tokens: this.aiConfig.openai.maxTokens || 2000, // Reduced tokens
-        temperature: this.aiConfig.openai.temperature || 0.1
+        max_completion_tokens: this.aiConfig.openai.maxCompletionTokens || this.aiConfig.openai.maxTokens || 1000 // Reduced for GPT-5 rate limits
       };
+
+      // Only add temperature for models that support it (not GPT-5)
+      if (!this.aiConfig.openai.model.includes('gpt-5')) {
+        requestData.temperature = this.aiConfig.openai.temperature || 0.1;
+      }
 
       const response = await axios.post('https://api.openai.com/v1/chat/completions', requestData, {
         headers: {
           'Authorization': `Bearer ${this.aiConfig.openai.apiKey}`,
           'Content-Type': 'application/json'
         },
-        timeout: 60000, // 60 second timeout
+        timeout: this.aiConfig.openai.timeout || 120000, // 2 minute timeout, configurable
         validateStatus: function (status) {
           return status < 500; // Don't throw for 4xx errors
         }
@@ -1179,13 +1187,87 @@ ${JSON.stringify(opportunities, null, 2)}`;
   findContentOpportunities(pages) { return []; }
   findTechnicalOpportunities(pages) { return []; }
   findUXOpportunities(pages) { return []; }
-  calculateAverageContentQuality(analyses) { return 0; }
+  calculateAverageContentQuality(analyses) { 
+    const qualities = analyses.map(a => a.qualityScore || 0).filter(q => q > 0);
+    return qualities.length ? Math.round(qualities.reduce((a, b) => a + b, 0) / qualities.length) : 0;
+  }
   aggregateTechnicalIssues(pages, type) { return []; }
   calculateStructuredDataCoverage(pages) { return 0; }
   aggregateNavigationIssues(pages) { return []; }
-  calculateUXScore(analyses) { return 0; }
+  calculateUXScore(analyses) { 
+    const scores = analyses.map(a => a.typographyScore || 0).filter(s => s > 0);
+    return scores.length ? Math.round(scores.reduce((a, b) => a + b, 0) / scores.length) : 0;
+  }
   identifyQuickWins(pages) { return []; }
   identifyStrategicImprovements(pages) { return []; }
+
+  // New helper methods for improved reporting
+  extractTargetAudiences(pages) {
+    const audiences = pages.map(p => p.analysis?.ai?.content?.targetAudience).filter(Boolean);
+    return [...new Set(audiences)];
+  }
+
+  extractKeyFindings(pages) {
+    const findings = [];
+    
+    // Extract performance findings
+    const performanceScores = pages.map(p => p.analysis?.performance?.score).filter(s => s !== undefined);
+    if (performanceScores.length) {
+      const avgPerf = Math.round(performanceScores.reduce((a, b) => a + b, 0) / performanceScores.length);
+      findings.push(`Average Performance Score: ${avgPerf}/100`);
+    }
+    
+    // Extract accessibility findings
+    const accessibilityViolations = pages.reduce((sum, p) => sum + (p.analysis?.accessibility?.totalViolations || 0), 0);
+    if (accessibilityViolations > 0) {
+      findings.push(`Total Accessibility Violations: ${accessibilityViolations} across ${pages.length} pages`);
+    }
+    
+    // Extract SEO findings  
+    const seoIssues = pages.reduce((sum, p) => sum + (p.analysis?.seo?.issues?.length || 0), 0);
+    if (seoIssues > 0) {
+      findings.push(`SEO Issues Identified: ${seoIssues} across ${pages.length} pages`);
+    }
+    
+    // Extract content findings
+    const contentAnalyses = pages.map(p => p.analysis?.ai?.content).filter(Boolean);
+    if (contentAnalyses.length) {
+      const topics = [...new Set(contentAnalyses.flatMap(c => c.topics || []))];
+      findings.push(`Content Topics Covered: ${topics.slice(0, 5).join(', ')}${topics.length > 5 ? '...' : ''}`);
+    }
+    
+    return findings.join('\n');
+  }
+
+  groupTargetAudiences(audiences) {
+    // For now, return unique audiences - could be enhanced with AI grouping
+    return [...new Set(audiences)];
+  }
+
+  extractStrategicRecommendations(aiResponse, pages) {
+    // Extract recommendations from AI response
+    const lines = aiResponse.split('\n');
+    const recommendations = [];
+    
+    let inRecommendations = false;
+    for (const line of lines) {
+      if (line.toLowerCase().includes('strategic recommendation') || line.toLowerCase().includes('recommendations')) {
+        inRecommendations = true;
+        continue;
+      }
+      
+      if (inRecommendations && (line.trim().startsWith('-') || line.trim().startsWith('•') || line.match(/^\d+\./))) {
+        recommendations.push({
+          priority: "High",
+          category: "Strategic",
+          recommendation: line.replace(/^[-•\d.]\s*/, '').trim(),
+          impact: "Improves overall website effectiveness"
+        });
+      }
+    }
+    
+    return recommendations.slice(0, 5); // Top 5 recommendations
+  }
 
   truncateContent(content, maxLength) {
     if (!content || content.length <= maxLength) return content;
